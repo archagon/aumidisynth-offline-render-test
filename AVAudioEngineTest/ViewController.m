@@ -161,7 +161,7 @@ void MyMIDIReadProc(const MIDIPacketList* pktlist, void* refCon, void* connRefCo
                     MusicTrackNewMIDIChannelEvent(track3, 0, &channelMessage);
                 }
                 
-                // actual pitch bend commnads
+                // actual pitch bend commands
                 int divisionsPerNote = 128;
                 int ocillations = 3;
                 CGFloat totalLength = ocillations * M_PI * 2;

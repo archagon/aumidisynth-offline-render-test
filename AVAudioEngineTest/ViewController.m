@@ -266,7 +266,6 @@ void MyMIDIReadProc(const MIDIPacketList* pktlist, void* refCon, void* connRefCo
             UInt32 enabled = 1;
             AudioUnitSetProperty(self.synths[i].audioUnit, kAUMIDISynthProperty_EnablePreload, kAudioUnitScope_Global, 0, &enabled, sizeof(enabled));
 
-            // TODO: is this needed?
             UInt32 instrumentMSB = kAUSampler_DefaultMelodicBankMSB;
             UInt32 instrumentLSB = kAUSampler_DefaultBankLSB;
             UInt32 percussionMSB = kAUSampler_DefaultPercussionBankMSB;
@@ -305,7 +304,7 @@ void MyMIDIReadProc(const MIDIPacketList* pktlist, void* refCon, void* connRefCo
 }
 
 -(void) stop {
-    //MusicPlayerStart(self.player);
+    //MusicPlayerStop(self.player);
     
     [self.sequencer stop];
 }
@@ -397,6 +396,7 @@ void MyMIDIReadProc(const MIDIPacketList* pktlist, void* refCon, void* connRefCo
                      timeStamp:(AudioTimeStamp *)timeStamp {
     [self clearBufferList:bufferList];
     AudioUnit outputUnit = self.engine.outputNode.audioUnit;
+    
     OSStatus status = AudioUnitRender(outputUnit, 0, timeStamp, 0, bufferLength, bufferList);
     if (status != noErr) {
         NSLog(@"Can not render audio unit");

@@ -9,7 +9,6 @@
 /* Begin PBXBuildFile section */
 		4E7EEAB71CC8411F0071623A /* main.m in Sources */ = {isa = PBXBuildFile; fileRef = 4E7EEAB61CC8411F0071623A /* main.m */; };
 		4E7EEABA1CC8411F0071623A /* AppDelegate.m in Sources */ = {isa = PBXBuildFile; fileRef = 4E7EEAB91CC8411F0071623A /* AppDelegate.m */; };
-		4E7EEABD1CC8411F0071623A /* ViewController.m in Sources */ = {isa = PBXBuildFile; fileRef = 4E7EEABC1CC8411F0071623A /* ViewController.m */; };
 		4E7EEAC01CC8411F0071623A /* Main.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 4E7EEABE1CC8411F0071623A /* Main.storyboard */; };
 		4E7EEAC21CC8411F0071623A /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 4E7EEAC11CC8411F0071623A /* Assets.xcassets */; };
 		4E7EEAC51CC8411F0071623A /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 4E7EEAC31CC8411F0071623A /* LaunchScreen.storyboard */; };
@@ -18,6 +17,7 @@
 		4E7EEAD21CC8425C0071623A /* AVKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 4E7EEAD01CC8425C0071623A /* AVKit.framework */; };
 		4E7EEAD41CC842650071623A /* AudioToolbox.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 4E7EEAD31CC842650071623A /* AudioToolbox.framework */; };
 		4E7EEADB1CC86C500071623A /* GeneralUser GS MuseScore v1.442.sf2 in Resources */ = {isa = PBXBuildFile; fileRef = 4E7EEADA1CC86C500071623A /* GeneralUser GS MuseScore v1.442.sf2 */; };
+		4E7EEADD1CC888F00071623A /* ViewControllerAUGraph.m in Sources */ = {isa = PBXBuildFile; fileRef = 4E7EEADC1CC888F00071623A /* ViewControllerAUGraph.m */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -37,6 +37,7 @@
 		4E7EEAD01CC8425C0071623A /* AVKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AVKit.framework; path = System/Library/Frameworks/AVKit.framework; sourceTree = SDKROOT; };
 		4E7EEAD31CC842650071623A /* AudioToolbox.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AudioToolbox.framework; path = System/Library/Frameworks/AudioToolbox.framework; sourceTree = SDKROOT; };
 		4E7EEADA1CC86C500071623A /* GeneralUser GS MuseScore v1.442.sf2 */ = {isa = PBXFileReference; lastKnownFileType = file; name = "GeneralUser GS MuseScore v1.442.sf2"; path = "Audio/GeneralUser GS MuseScore v1.442.sf2"; sourceTree = "<group>"; };
+		4E7EEADC1CC888F00071623A /* ViewControllerAUGraph.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = ViewControllerAUGraph.m; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -79,6 +80,7 @@
 				4E7EEAB91CC8411F0071623A /* AppDelegate.m */,
 				4E7EEABB1CC8411F0071623A /* ViewController.h */,
 				4E7EEABC1CC8411F0071623A /* ViewController.m */,
+				4E7EEADC1CC888F00071623A /* ViewControllerAUGraph.m */,
 				4E7EEACD1CC841470071623A /* Audio.m */,
 				4E7EEACC1CC841470071623A /* Audio.h */,
 				4E7EEAC11CC8411F0071623A /* Assets.xcassets */,
@@ -176,8 +178,8 @@
 			buildActionMask = 2147483647;
 			files = (
 				4E7EEACE1CC841470071623A /* Audio.m in Sources */,
-				4E7EEABD1CC8411F0071623A /* ViewController.m in Sources */,
 				4E7EEABA1CC8411F0071623A /* AppDelegate.m in Sources */,
+				4E7EEADD1CC888F00071623A /* ViewControllerAUGraph.m in Sources */,
 				4E7EEAB71CC8411F0071623A /* main.m in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

@@ -12,24 +12,11 @@
 #import <AVFoundation/AVFoundation.h>
 #import <AudioToolbox/AudioToolbox.h>
 
+OSStatus OSSTATUS = noErr;
+#define OSSTATUS_CHECK if (OSSTATUS != 0) [NSException raise:NSInternalInconsistencyException format:@"OSStatus error: %d", (int)OSSTATUS];
+
 AudioBufferList *AEAllocateAndInitAudioBufferList(AudioStreamBasicDescription audioFormat, int frameCount);
 void AEFreeAudioBufferList(AudioBufferList *bufferList );
-
-void MyMIDIReadProc(const MIDIPacketList* pktlist, void* refCon, void* connRefCon)
-{
-    AudioUnit synth = [(__bridge NSValue*)refCon pointerValue];
-    
-    MIDIPacket* packet = (MIDIPacket*)pktlist->packet;
-    for (int i = 0; i < pktlist->numPackets; i++) {
-        Byte midiStatus = (packet->length >= 1 ? packet->data[0] : 0);
-        Byte midiData1 = (packet->length >= 2 ? packet->data[1] : 0);
-        Byte midiData2 = (packet->length >= 3 ? packet->data[2] : 0);
-        
-        MusicDeviceMIDIEvent(synth, midiStatus, midiData1, midiData2, 0);
-        
-        packet = MIDIPacketNext(packet);
-    }
-}
 
 @interface ViewController ()
 @property (nonatomic) AUGraph graph;
@@ -39,7 +26,7 @@ void MyMIDIReadProc(const MIDIPacketList* pktlist, void* refCon, void* connRefCo
 @property (nonatomic) AUNode mixerNode;
 @property (nonatomic) MusicPlayer player;
 @property (nonatomic) NSArray <NSValue*> * synths;
-@property (nonatomic) NSArray <NSValue*> * synthNodes;
+@property (nonatomic) NSArray <NSNumber*> * synthNodes;
 @end
 
 @implementation ViewController
@@ -49,7 +36,7 @@ void MyMIDIReadProc(const MIDIPacketList* pktlist, void* refCon, void* connRefCo
     
     [[AVAudioSession sharedInstance] setActive:YES error:NULL];
     [[AVAudioSession sharedInstance] setPreferredSampleRate:44100 error:NULL];
-    CGFloat sampleRate = [[AVAudioSession sharedInstance] preferredSampleRate];
+    Float64 sampleRate = [[AVAudioSession sharedInstance] preferredSampleRate];
     
     // audio graph
     {
@@ -64,24 +51,24 @@ void MyMIDIReadProc(const MIDIPacketList* pktlist, void* refCon, void* connRefCo
             cd.componentFlags            = 0;
             cd.componentFlagsMask        = 0;
             
-            NewAUGraph (&graph);
+            OSSTATUS = NewAUGraph (&graph); OSSTATUS_CHECK
             
             cd.componentType = kAudioUnitType_Mixer;
             cd.componentSubType = kAudioUnitSubType_MultiChannelMixer;
             
-            AUGraphAddNode (graph, &cd, &mixerNode);
+            OSSTATUS = AUGraphAddNode (graph, &cd, &mixerNode); OSSTATUS_CHECK
             
             cd.componentType = kAudioUnitType_Output;
             cd.componentSubType = kAudioUnitSubType_RemoteIO;
             
-            AUGraphAddNode (graph, &cd, &ioNode);
+            OSSTATUS = AUGraphAddNode (graph, &cd, &ioNode); OSSTATUS_CHECK
             
-            AUGraphOpen (graph);
+            OSSTATUS = AUGraphOpen (graph); OSSTATUS_CHECK
             
-            AUGraphConnectNodeInput (graph, mixerNode, 0, ioNode, 0);
+            OSSTATUS = AUGraphConnectNodeInput (graph, mixerNode, 0, ioNode, 0); OSSTATUS_CHECK
             
-            AUGraphNodeInfo (graph, mixerNode, 0, &mixerUnit);
-            AUGraphNodeInfo (graph, ioNode, 0, &ioUnit);
+            OSSTATUS = AUGraphNodeInfo (graph, mixerNode, 0, &mixerUnit); OSSTATUS_CHECK
+            OSSTATUS = AUGraphNodeInfo (graph, ioNode, 0, &ioUnit); OSSTATUS_CHECK
             
             self.graph = graph;
             self.mixerUnit = mixerUnit;
@@ -96,45 +83,40 @@ void MyMIDIReadProc(const MIDIPacketList* pktlist, void* refCon, void* connRefCo
             UInt32 framesPerSlicePropertySize = sizeof (framesPerSlice);
             UInt32 sampleRatePropertySize = sizeof (sampleRate);
             
-            AudioUnitInitialize (self.ioUnit);
+//            AudioUnitInitialize (self.ioUnit);
+
+            // not writable
+//            OSSTATUS = AudioUnitSetProperty (self.ioUnit,
+//                                  kAudioUnitProperty_SampleRate,
+//                                  kAudioUnitScope_Output,
+//                                  0,
+//                                  &sampleRate,
+//                                  sampleRatePropertySize); OSSTATUS_CHECK
             
-            AudioUnitSetProperty (
-                                  self.ioUnit,
+            OSSTATUS = AudioUnitSetProperty (self.mixerUnit,
                                   kAudioUnitProperty_SampleRate,
                                   kAudioUnitScope_Output,
                                   0,
                                   &sampleRate,
-                                  sampleRatePropertySize
-                                  );
+                                  sampleRatePropertySize); OSSTATUS_CHECK
             
-            AudioUnitSetProperty (
-                                  self.mixerUnit,
-                                  kAudioUnitProperty_SampleRate,
-                                  kAudioUnitScope_Output,
-                                  0,
-                                  &sampleRate,
-                                  sampleRatePropertySize
-                                  );
-            
-            AudioUnitGetProperty (
-                                  self.ioUnit,
+            OSSTATUS = AudioUnitGetProperty (self.ioUnit,
                                   kAudioUnitProperty_MaximumFramesPerSlice,
                                   kAudioUnitScope_Global,
                                   0,
                                   &framesPerSlice,
-                                  &framesPerSlicePropertySize
-                                  );
+                                  &framesPerSlicePropertySize); OSSTATUS_CHECK
             
             UInt32 busCount = 50;
-            AudioUnitSetProperty(self.mixerUnit,
+            OSSTATUS = AudioUnitSetProperty(self.mixerUnit,
                                  kAudioUnitProperty_ElementCount,
                                  kAudioUnitScope_Input,
                                  0,
                                  &busCount,
-                                 sizeof(busCount));
+                                 sizeof(busCount)); OSSTATUS_CHECK
             
-            AUGraphInitialize (self.graph);
-            AUGraphStart (self.graph);
+//            AUGraphInitialize (self.graph);
+//            AUGraphStart (self.graph);
         }
         
         // create samplers
@@ -151,41 +133,41 @@ void MyMIDIReadProc(const MIDIPacketList* pktlist, void* refCon, void* connRefCo
             cd.componentType = kAudioUnitType_MusicDevice;
             cd.componentSubType = kAudioUnitSubType_MIDISynth;
             
-            AUGraphAddNode(self.graph, &cd, &samplerNode);
+            OSSTATUS = AUGraphAddNode(self.graph, &cd, &samplerNode); OSSTATUS_CHECK
             
-            AUGraphOpen(self.graph);
-            AUGraphConnectNodeInput(self.graph, samplerNode, 0, self.mixerNode, 1 + i);
+            OSSTATUS = AUGraphOpen(self.graph); OSSTATUS_CHECK
+            OSSTATUS = AUGraphConnectNodeInput(self.graph, samplerNode, 0, self.mixerNode, 1 + i); OSSTATUS_CHECK
             
-            AUGraphNodeInfo (self.graph, samplerNode, 0, &samplerUnit);
+            OSSTATUS = AUGraphNodeInfo (self.graph, samplerNode, 0, &samplerUnit); OSSTATUS_CHECK
             
             UInt32 framesPerSlice = 0;
             UInt32 framesPerSlicePropertySize = sizeof (framesPerSlice);
             UInt32 sampleRatePropertySize = sizeof (sampleRate);
         
-            AudioUnitGetProperty(self.ioUnit,
+            OSSTATUS = AudioUnitGetProperty(self.ioUnit,
                                  kAudioUnitProperty_MaximumFramesPerSlice,
                                  kAudioUnitScope_Global,
                                  0,
                                  &framesPerSlice,
-                                 &framesPerSlicePropertySize);
+                                 &framesPerSlicePropertySize); OSSTATUS_CHECK
             
-            AudioUnitSetProperty(samplerUnit,
+            OSSTATUS = AudioUnitSetProperty(samplerUnit,
                                  kAudioUnitProperty_SampleRate,
                                  kAudioUnitScope_Output,
                                  0,
                                  &sampleRate,
-                                 sampleRatePropertySize);
+                                 sampleRatePropertySize); OSSTATUS_CHECK
             
-            AudioUnitSetProperty(samplerUnit,
+            OSSTATUS = AudioUnitSetProperty(samplerUnit,
                                  kAudioUnitProperty_MaximumFramesPerSlice,
                                  kAudioUnitScope_Global,
                                  0,
                                  &framesPerSlice,
-                                 framesPerSlicePropertySize);
+                                 framesPerSlicePropertySize); OSSTATUS_CHECK
             
-            AudioUnitInitialize(samplerUnit);
-            
-            AUGraphUpdate(self.graph, NULL);
+//            AudioUnitInitialize(samplerUnit);
+//            
+//            AUGraphUpdate(self.graph, NULL);
             
             [synths addObject:[NSValue valueWithPointer:samplerUnit]];
             [synthNodes addObject:@(samplerNode)];
@@ -193,42 +175,31 @@ void MyMIDIReadProc(const MIDIPacketList* pktlist, void* refCon, void* connRefCo
         
         self.synths = synths;
         self.synthNodes = synthNodes;
-        
-        [self setupSoundbanks];
     }
     
     // player
     {
-        MIDIClientRef virtualClient;
-        NSString* endpointName = @"Virtual MIDI Client";
-        MIDIClientCreate((__bridge CFStringRef)endpointName, NULL, NULL, &virtualClient);
+        // note: offline rendering does not seem to work with a virtual MIDI endpoint
         
         MusicPlayer player;
-        NewMusicPlayer(&player);
+        OSSTATUS = NewMusicPlayer(&player); OSSTATUS_CHECK
         
         MusicSequence sequence;
-        NewMusicSequence(&sequence);
-        MusicPlayerSetSequence(player, sequence);
+        OSSTATUS = NewMusicSequence(&sequence); OSSTATUS_CHECK
+        OSSTATUS = MusicPlayerSetSequence(player, sequence); OSSTATUS_CHECK
+        OSSTATUS = MusicSequenceSetAUGraph(sequence, self.graph); OSSTATUS_CHECK
         
-        MIDIEndpointRef virtualEndpoint;
-        
-        NSString* name = [NSString stringWithFormat:@"Virtual MIDI Endpoint %d (%lu)", 1, (long)self];
-        MIDIDestinationCreate(virtualClient, (__bridge CFStringRef)name, MyMIDIReadProc, (__bridge void * _Nullable)(self.synths[0]), &virtualEndpoint);
         MusicTrack track1;
-        MusicSequenceNewTrack(sequence, &track1);
-        MusicTrackSetDestMIDIEndpoint(track1, virtualEndpoint);
+        OSSTATUS = MusicSequenceNewTrack(sequence, &track1); OSSTATUS_CHECK
+        OSSTATUS = MusicTrackSetDestNode(track1, [self.synthNodes[0] integerValue]); OSSTATUS_CHECK
         
-        name = [NSString stringWithFormat:@"Virtual MIDI Endpoint %d (%lu)", 2, (long)self];
-        MIDIDestinationCreate(virtualClient, (__bridge CFStringRef)name, MyMIDIReadProc, (__bridge void * _Nullable)(self.synths[1]), &virtualEndpoint);
         MusicTrack track2;
-        MusicSequenceNewTrack(sequence, &track2);
-        MusicTrackSetDestMIDIEndpoint(track2, virtualEndpoint);
+        OSSTATUS = MusicSequenceNewTrack(sequence, &track2); OSSTATUS_CHECK
+        OSSTATUS = MusicTrackSetDestNode(track2, [self.synthNodes[1] integerValue]); OSSTATUS_CHECK
         
-        name = [NSString stringWithFormat:@"Virtual MIDI Endpoint %d (%lu)", 3, (long)self];
-        MIDIDestinationCreate(virtualClient, (__bridge CFStringRef)name, MyMIDIReadProc, (__bridge void * _Nullable)(self.synths[2]), &virtualEndpoint);
         MusicTrack track3;
-        MusicSequenceNewTrack(sequence, &track3);
-        MusicTrackSetDestMIDIEndpoint(track3, virtualEndpoint);
+        OSSTATUS = MusicSequenceNewTrack(sequence, &track3); OSSTATUS_CHECK
+        OSSTATUS = MusicTrackSetDestNode(track3, [self.synthNodes[2] integerValue]); OSSTATUS_CHECK
         
         // simple scale
         int scalar = 2;
@@ -238,14 +209,14 @@ void MyMIDIReadProc(const MIDIPacketList* pktlist, void* refCon, void* connRefCo
             msg.duration = 0.75 * scalar;
             msg.velocity = 0xff;
             
-            //msg.note = 50 + i * 2;
-            //MusicTrackNewMIDINoteEvent(track1, i * scalar, &msg);
-            //
-            //msg.note = 50 + i * 2 + 4;
-            //MusicTrackNewMIDINoteEvent(track2, (i + 0.1) * scalar, &msg);
+            msg.note = 50 + i * 2;
+            OSSTATUS = MusicTrackNewMIDINoteEvent(track1, i * scalar, &msg); OSSTATUS_CHECK
+            
+            msg.note = 50 + i * 2 + 4;
+            OSSTATUS = MusicTrackNewMIDINoteEvent(track2, (i + 0.1) * scalar, &msg); OSSTATUS_CHECK
             
             msg.note = 50 + i * 2 + 4 + 5;
-            MusicTrackNewMIDINoteEvent(track3, (i + 0.2) * scalar, &msg);
+            OSSTATUS = MusicTrackNewMIDINoteEvent(track3, (i + 0.2) * scalar, &msg); OSSTATUS_CHECK
             
             // pitch bends for track 3
             {
@@ -261,32 +232,32 @@ void MyMIDIReadProc(const MIDIPacketList* pktlist, void* refCon, void* connRefCo
                     channelMessage.data1 = 0x65;
                     channelMessage.data2 = 0x00 >> 7;
                     
-                    MusicTrackNewMIDIChannelEvent(track3, 0, &channelMessage);
+                    OSSTATUS = MusicTrackNewMIDIChannelEvent(track3, 0, &channelMessage); OSSTATUS_CHECK
                     
                     channelMessage.data1 = 0x64;
                     channelMessage.data2 = 0x00;
                     
-                    MusicTrackNewMIDIChannelEvent(track3, 0, &channelMessage);
+                    OSSTATUS = MusicTrackNewMIDIChannelEvent(track3, 0, &channelMessage); OSSTATUS_CHECK
                     
                     channelMessage.data1 = 0x06;
                     channelMessage.data2 = semitones;
                     
-                    MusicTrackNewMIDIChannelEvent(track3, 0, &channelMessage);
+                    OSSTATUS = MusicTrackNewMIDIChannelEvent(track3, 0, &channelMessage); OSSTATUS_CHECK
                     
                     channelMessage.data1 = 0x26;
                     channelMessage.data2 = cents;
                     
-                    MusicTrackNewMIDIChannelEvent(track3, 0, &channelMessage);
+                    OSSTATUS = MusicTrackNewMIDIChannelEvent(track3, 0, &channelMessage); OSSTATUS_CHECK
                     
                     channelMessage.data1 = 0x65;
                     channelMessage.data2 = 0x7F;
                     
-                    MusicTrackNewMIDIChannelEvent(track3, 0, &channelMessage);
+                    OSSTATUS = MusicTrackNewMIDIChannelEvent(track3, 0, &channelMessage); OSSTATUS_CHECK
                     
                     channelMessage.data1 = 0x64;
                     channelMessage.data2 = 0x7F;
                     
-                    MusicTrackNewMIDIChannelEvent(track3, 0, &channelMessage);
+                    OSSTATUS = MusicTrackNewMIDIChannelEvent(track3, 0, &channelMessage); OSSTATUS_CHECK
                 }
                 
                 // actual pitch bend commands
@@ -311,13 +282,15 @@ void MyMIDIReadProc(const MIDIPacketList* pktlist, void* refCon, void* connRefCo
                     channelMessage.data1 = bendLSB;
                     channelMessage.data2 = bendMSB;
                     
-                    MusicTrackNewMIDIChannelEvent(track3, (i + 0.2) * scalar + scalar * fraction, &channelMessage);
+                    OSSTATUS = MusicTrackNewMIDIChannelEvent(track3, (i + 0.2) * scalar + scalar * fraction, &channelMessage); OSSTATUS_CHECK
                 }
             }
         }
         
         self.player = player;
     }
+    
+    [self setupSoundbanks];
     
     // buttons
     {
@@ -358,12 +331,12 @@ void MyMIDIReadProc(const MIDIPacketList* pktlist, void* refCon, void* connRefCo
         NSURL* aUrl = [[NSBundle mainBundle] URLForResource:@"GeneralUser GS MuseScore v1.442" withExtension:@"sf2"];
         
         CFURLRef url = CFBridgingRetain(aUrl);
-        AudioUnitSetProperty([self.synths[i] pointerValue],
+        OSSTATUS = AudioUnitSetProperty([self.synths[i] pointerValue],
                              kMusicDeviceProperty_SoundBankURL,
                              kAudioUnitScope_Global,
                              0,
                              &url,
-                             sizeof(url));
+                             sizeof(url)); OSSTATUS_CHECK
         //CFBridgingRelease((__bridge CFTypeRef _Nullable)(aUrl));
     }
 }
@@ -375,21 +348,21 @@ void MyMIDIReadProc(const MIDIPacketList* pktlist, void* refCon, void* connRefCo
         
         for (int j = 0; j < 16; j++) {
             UInt32 enabled = 1;
-            AudioUnitSetProperty([self.synths[i] pointerValue], kAUMIDISynthProperty_EnablePreload, kAudioUnitScope_Global, 0, &enabled, sizeof(enabled));
+            OSSTATUS = AudioUnitSetProperty([self.synths[i] pointerValue], kAUMIDISynthProperty_EnablePreload, kAudioUnitScope_Global, 0, &enabled, sizeof(enabled)); OSSTATUS_CHECK
 
             UInt32 instrumentMSB = kAUSampler_DefaultMelodicBankMSB;
             UInt32 instrumentLSB = kAUSampler_DefaultBankLSB;
             UInt32 percussionMSB = kAUSampler_DefaultPercussionBankMSB;
             UInt32 percussionLSB = kAUSampler_DefaultBankLSB;
-            MusicDeviceMIDIEvent([self.synths[i] pointerValue], 0xB0 | j, 0x00, instrumentMSB, 0);
-            MusicDeviceMIDIEvent([self.synths[i] pointerValue], 0xB0 | j, 0x20, instrumentLSB, 0);
+            OSSTATUS = MusicDeviceMIDIEvent([self.synths[i] pointerValue], 0xB0 | j, 0x00, instrumentMSB, 0); OSSTATUS_CHECK
+            OSSTATUS = MusicDeviceMIDIEvent([self.synths[i] pointerValue], 0xB0 | j, 0x20, instrumentLSB, 0); OSSTATUS_CHECK
 
-            MusicDeviceMIDIEvent([self.synths[i] pointerValue], 0xC0 | j, (UInt32)actualPreset, 0, 0);
+            OSSTATUS = MusicDeviceMIDIEvent([self.synths[i] pointerValue], 0xC0 | j, (UInt32)actualPreset, 0, 0); OSSTATUS_CHECK
 
             enabled = 0;
-            AudioUnitSetProperty([self.synths[i] pointerValue], kAUMIDISynthProperty_EnablePreload, kAudioUnitScope_Global, 0, &enabled, sizeof(enabled));
+            OSSTATUS = AudioUnitSetProperty([self.synths[i] pointerValue], kAUMIDISynthProperty_EnablePreload, kAudioUnitScope_Global, 0, &enabled, sizeof(enabled)); OSSTATUS_CHECK
 
-            MusicDeviceMIDIEvent([self.synths[i] pointerValue], 0xC0 | j, (UInt32)actualPreset, 0, 0);
+            OSSTATUS = MusicDeviceMIDIEvent([self.synths[i] pointerValue], 0xC0 | j, (UInt32)actualPreset, 0, 0); OSSTATUS_CHECK
         }
     }
 }
@@ -397,130 +370,217 @@ void MyMIDIReadProc(const MIDIPacketList* pktlist, void* refCon, void* connRefCo
 -(void) start {
     [self stop];
     
-    AUGraphStart(self.graph);
+    // needed for playback
+    OSSTATUS = AUGraphInitialize(self.graph); OSSTATUS_CHECK
+//    AUGraphStart(self.graph);
     
+//    [self setupSoundbanks];
     [self setupInstruments];
+    
+//    AUGraphUpdate(self.graph, NULL);
+    
+    [self setRegularOutput];
 
-    MusicPlayerSetTime(self.player, 0);
-    MusicPlayerStart(self.player);
+    OSSTATUS = MusicPlayerSetTime(self.player, 0); OSSTATUS_CHECK
+    OSSTATUS = MusicPlayerStart(self.player); OSSTATUS_CHECK
 }
 
 -(void) render {
-    [self start];
+    [self stop];
     
-//    [self renderAudioAndWriteToFile];
+    //AUGraphStart(self.graph);
+    
+    [self setGenericOutput];
+    
+    [self setupInstruments];
+    
+    OSSTATUS = MusicPlayerSetTime(self.player, 0); OSSTATUS_CHECK
+    OSSTATUS = MusicPlayerStart(self.player); OSSTATUS_CHECK
+    
+    [self renderAudioAndWriteToFile];
+    
+    OSSTATUS = MusicPlayerStop(self.player); OSSTATUS_CHECK
 }
 
 -(void) stop {
-    MusicPlayerStop(self.player);
+    OSSTATUS = MusicPlayerStop(self.player); OSSTATUS_CHECK
+}
+
+-(void) setRegularOutput {
+}
+
+-(void) setGenericOutput {
+//    AUGraphStop(self.graph);
+    
+    Float64 sampleRate = 44100;
+    
+    AUNode node = self.ioNode;
+    
+    AudioComponentDescription desc;
+    AudioUnit unit;
+    OSSTATUS = AUGraphNodeInfo(self.graph, self.ioNode, &desc, &unit); OSSTATUS_CHECK
+    
+    OSSTATUS = AUGraphRemoveNode (self.graph, node); OSSTATUS_CHECK
+    desc.componentSubType = kAudioUnitSubType_GenericOutput;
+    OSSTATUS = AUGraphAddNode (self.graph, &desc, &node); OSSTATUS_CHECK
+    OSSTATUS = AUGraphNodeInfo(self.graph, node, NULL, &unit); OSSTATUS_CHECK
+    self.ioUnit = unit;
+    self.ioNode = node;
+    
+    OSSTATUS = AUGraphConnectNodeInput (self.graph, self.mixerNode, 0, self.ioNode, 0); OSSTATUS_CHECK
+//    AudioUnitInitialize(self.ioUnit);
+    
+    OSSTATUS = AudioUnitSetProperty (self.ioUnit,
+                          kAudioUnitProperty_SampleRate,
+                          kAudioUnitScope_Output, 0,
+                          &sampleRate, sizeof(sampleRate)); OSSTATUS_CHECK
+    
+    NSInteger numFrames = 512;
+    
+    for (int i = 0; i < self.synths.count; i++) {
+        UInt32 value = 1;
+//        int asdf = AudioUnitSetProperty ([self.synths[i] pointerValue],
+//                              kAudioUnitProperty_OfflineRender,
+//                              kAudioUnitScope_Global, 0,
+//                              &value, sizeof(value));
+        
+        //AudioUnitSetProperty (theSynth,
+        //                      kAudioUnitProperty_CPULoad,
+        //                      kAudioUnitScope_Global, 0,
+        //                      &maxCPULoad, sizeof(maxCPULoad))
+        
+        OSSTATUS = AudioUnitSetProperty ([self.synths[i] pointerValue], kAudioUnitProperty_MaximumFramesPerSlice,
+                              kAudioUnitScope_Global, 0,
+                              &numFrames, sizeof(numFrames)); OSSTATUS_CHECK
+    }
+    
+    OSSTATUS = AudioUnitSetProperty (self.mixerUnit, kAudioUnitProperty_MaximumFramesPerSlice,
+                          kAudioUnitScope_Global, 0,
+                          &numFrames, sizeof(numFrames)); OSSTATUS_CHECK
+    
+    OSSTATUS = AudioUnitSetProperty (self.ioUnit, kAudioUnitProperty_MaximumFramesPerSlice,
+                          kAudioUnitScope_Global, 0,
+                          &numFrames, sizeof(numFrames)); OSSTATUS_CHECK
+    
+//    AUGraphUpdate(self.graph, NULL);
+//    AUGraphStart(self.graph);
+    
+    OSSTATUS = AUGraphInitialize(self.graph);
 }
 
 // from http://stackoverflow.com/questions/30679061/can-i-use-avaudioengine-to-read-from-a-file-process-with-an-audio-unit-and-writ
 
-//- (void)renderAudioAndWriteToFile {
+- (void)renderAudioAndWriteToFile {
 //    AUGraphStop(self.graph);
-//    
-//    AVAudioOutputNode *outputNode = self.ioNode;
-//    AudioStreamBasicDescription const *audioDescription = [outputNode outputFormatForBus:0].streamDescription;
-//    NSString *path = [self filePath];
-//    ExtAudioFileRef audioFile = [self createAndSetupExtAudioFileWithASBD:audioDescription andFilePath:path];
-//    if (!audioFile)
-//        return;
-//    NSTimeInterval duration = 20;
-//    NSUInteger lengthInFrames = duration * audioDescription->mSampleRate;
-//    const NSUInteger kBufferLength = 4096;
-//    AudioBufferList *bufferList = AEAllocateAndInitAudioBufferList(*audioDescription, kBufferLength);
-//    AudioTimeStamp timeStamp;
-//    memset (&timeStamp, 0, sizeof(timeStamp));
-//    timeStamp.mFlags = kAudioTimeStampSampleTimeValid;
-//    OSStatus status = noErr;
-//    for (NSUInteger i = kBufferLength; i < lengthInFrames; i += kBufferLength) {
-//        NSLog(@"time stamp: %f", timeStamp.mSampleTime);
-//        status = [self renderToBufferList:bufferList writeToFile:audioFile bufferLength:kBufferLength timeStamp:&timeStamp];
-//        if (status != noErr)
-//            break;
-//    }
-//    if (status == noErr && timeStamp.mSampleTime < lengthInFrames) {
-//        NSUInteger restBufferLength = (NSUInteger) (lengthInFrames - timeStamp.mSampleTime);
-//        AudioBufferList *restBufferList = AEAllocateAndInitAudioBufferList(*audioDescription, restBufferLength);
-//        status = [self renderToBufferList:restBufferList writeToFile:audioFile bufferLength:restBufferLength timeStamp:&timeStamp];
-//        AEFreeAudioBufferList(restBufferList);
-//    }
-//    AEFreeAudioBufferList(bufferList);
-//    ExtAudioFileDispose(audioFile);
-//    if (status != noErr)
-//        NSLog(@"An error has occurred");
-//    else
-//        NSLog(@"Finished writing to file at path: %@", path);
-//}
-//
-//- (NSString *)filePath {
-//    NSArray *documentsFolders =
-//    NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES);
-//    NSString *fileName = [NSString stringWithFormat:@"%@.m4a", [[NSUUID UUID] UUIDString]];
-//    NSString *path = [documentsFolders[0] stringByAppendingPathComponent:fileName];
-//    return path;
-//}
-//
-//- (ExtAudioFileRef)createAndSetupExtAudioFileWithASBD:(AudioStreamBasicDescription const *)audioDescription
-//                                          andFilePath:(NSString *)path {
-//    AudioStreamBasicDescription destinationFormat;
-//    memset(&destinationFormat, 0, sizeof(destinationFormat));
-//    destinationFormat.mChannelsPerFrame = audioDescription->mChannelsPerFrame;
-//    destinationFormat.mSampleRate = audioDescription->mSampleRate;
-//    destinationFormat.mFormatID = kAudioFormatMPEG4AAC;
-//    ExtAudioFileRef audioFile;
-//    OSStatus status = ExtAudioFileCreateWithURL(
-//                                                (__bridge CFURLRef) [NSURL fileURLWithPath:path],
-//                                                kAudioFileM4AType,
-//                                                &destinationFormat,
-//                                                NULL,
-//                                                kAudioFileFlags_EraseFile,
-//                                                &audioFile
-//                                                );
-//    if (status != noErr) {
-//        NSLog(@"Can not create ext audio file");
-//        return nil;
-//    }
-//    UInt32 codecManufacturer = kAppleSoftwareAudioCodecManufacturer;
-//    status = ExtAudioFileSetProperty(
-//                                     audioFile, kExtAudioFileProperty_CodecManufacturer, sizeof(UInt32), &codecManufacturer
-//                                     );
-//    status = ExtAudioFileSetProperty(
-//                                     audioFile, kExtAudioFileProperty_ClientDataFormat, sizeof(AudioStreamBasicDescription), audioDescription
-//                                     );
-//    status = ExtAudioFileWriteAsync(audioFile, 0, NULL);
-//    if (status != noErr) {
-//        NSLog(@"Can not setup ext audio file");
-//        return nil;
-//    }
-//    return audioFile;
-//}
-//
-//- (OSStatus)renderToBufferList:(AudioBufferList *)bufferList
-//                   writeToFile:(ExtAudioFileRef)audioFile
-//                  bufferLength:(NSUInteger)bufferLength
-//                     timeStamp:(AudioTimeStamp *)timeStamp {
-//    [self clearBufferList:bufferList];
-//    AudioUnit outputUnit = self.engine.outputNode.audioUnit;
-//    
-//    OSStatus status = AudioUnitRender(outputUnit, 0, timeStamp, 0, bufferLength, bufferList);
-//    if (status != noErr) {
-//        NSLog(@"Can not render audio unit");
-//        return status;
-//    }
-//    timeStamp->mSampleTime += bufferLength;
-//    status = ExtAudioFileWrite(audioFile, bufferLength, bufferList);
-//    if (status != noErr)
-//        NSLog(@"Can not write audio to file");
-//    return status;
-//}
-//
-//- (void)clearBufferList:(AudioBufferList *)bufferList {
-//    for (int bufferIndex = 0; bufferIndex < bufferList->mNumberBuffers; bufferIndex++) {
-//        memset(bufferList->mBuffers[bufferIndex].mData, 0, bufferList->mBuffers[bufferIndex].mDataByteSize);
-//    }
-//}
+    
+    UInt32 size;
+    AudioStreamBasicDescription clientFormat;
+    memset (&clientFormat, 0, sizeof(AudioStreamBasicDescription));
+    size = sizeof(clientFormat);
+    AudioUnitGetProperty (self.ioUnit,
+                          kAudioUnitProperty_StreamFormat,
+                          kAudioUnitScope_Output, 0,
+                          &clientFormat, &size);
+    
+    AudioStreamBasicDescription const *audioDescription = &clientFormat;
+    NSString *path = [self filePath];
+    ExtAudioFileRef audioFile = [self createAndSetupExtAudioFileWithASBD:audioDescription andFilePath:path];
+    if (!audioFile)
+        return;
+    NSTimeInterval duration = 20;
+    NSUInteger lengthInFrames = duration * audioDescription->mSampleRate;
+    const NSUInteger kBufferLength = 512;
+    AudioBufferList *bufferList = AEAllocateAndInitAudioBufferList(*audioDescription, kBufferLength);
+    AudioTimeStamp timeStamp;
+    memset (&timeStamp, 0, sizeof(timeStamp));
+    timeStamp.mFlags = kAudioTimeStampSampleTimeValid;
+    OSStatus status = noErr;
+    for (NSUInteger i = kBufferLength; i < lengthInFrames; i += kBufferLength) {
+        status = [self renderToBufferList:bufferList writeToFile:audioFile bufferLength:kBufferLength timeStamp:&timeStamp];
+        if (status != noErr)
+            break;
+    }
+    if (status == noErr && timeStamp.mSampleTime < lengthInFrames) {
+        NSUInteger restBufferLength = (NSUInteger) (lengthInFrames - timeStamp.mSampleTime);
+        AudioBufferList *restBufferList = AEAllocateAndInitAudioBufferList(*audioDescription, restBufferLength);
+        status = [self renderToBufferList:restBufferList writeToFile:audioFile bufferLength:restBufferLength timeStamp:&timeStamp];
+        AEFreeAudioBufferList(restBufferList);
+    }
+    AEFreeAudioBufferList(bufferList);
+    ExtAudioFileDispose(audioFile);
+    if (status != noErr)
+        NSLog(@"An error has occurred");
+    else
+        NSLog(@"Finished writing to file at path: %@", path);
+}
+
+- (NSString *)filePath {
+    NSArray *documentsFolders =
+    NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES);
+    NSString *fileName = [NSString stringWithFormat:@"%@.m4a", [[NSUUID UUID] UUIDString]];
+    NSString *path = [documentsFolders[0] stringByAppendingPathComponent:fileName];
+    return path;
+}
+
+- (ExtAudioFileRef)createAndSetupExtAudioFileWithASBD:(AudioStreamBasicDescription const *)audioDescription
+                                          andFilePath:(NSString *)path {
+    AudioStreamBasicDescription destinationFormat;
+    memset(&destinationFormat, 0, sizeof(destinationFormat));
+    destinationFormat.mChannelsPerFrame = audioDescription->mChannelsPerFrame;
+    destinationFormat.mSampleRate = audioDescription->mSampleRate;
+    destinationFormat.mFormatID = kAudioFormatMPEG4AAC;
+    ExtAudioFileRef audioFile;
+    OSStatus status = ExtAudioFileCreateWithURL(
+                                                (__bridge CFURLRef) [NSURL fileURLWithPath:path],
+                                                kAudioFileM4AType,
+                                                &destinationFormat,
+                                                NULL,
+                                                kAudioFileFlags_EraseFile,
+                                                &audioFile
+                                                );
+    if (status != noErr) {
+        NSLog(@"Can not create ext audio file");
+        return nil;
+    }
+    UInt32 codecManufacturer = kAppleSoftwareAudioCodecManufacturer;
+    status = ExtAudioFileSetProperty(
+                                     audioFile, kExtAudioFileProperty_CodecManufacturer, sizeof(UInt32), &codecManufacturer
+                                     );
+    status = ExtAudioFileSetProperty(
+                                     audioFile, kExtAudioFileProperty_ClientDataFormat, sizeof(AudioStreamBasicDescription), audioDescription
+                                     );
+    status = ExtAudioFileWriteAsync(audioFile, 0, NULL);
+    if (status != noErr) {
+        NSLog(@"Can not setup ext audio file");
+        return nil;
+    }
+    return audioFile;
+}
+
+- (OSStatus)renderToBufferList:(AudioBufferList *)bufferList
+                   writeToFile:(ExtAudioFileRef)audioFile
+                  bufferLength:(NSUInteger)bufferLength
+                     timeStamp:(AudioTimeStamp *)timeStamp {
+    [self clearBufferList:bufferList];
+    AudioUnit outputUnit = self.ioUnit;
+    
+    OSStatus status = AudioUnitRender(outputUnit, 0, timeStamp, 0, bufferLength, bufferList);
+    if (status != noErr) {
+        NSLog(@"Can not render audio unit");
+        return status;
+    }
+    timeStamp->mSampleTime += bufferLength;
+    status = ExtAudioFileWrite(audioFile, bufferLength, bufferList);
+    if (status != noErr)
+        NSLog(@"Can not write audio to file");
+    return status;
+}
+
+- (void)clearBufferList:(AudioBufferList *)bufferList {
+    for (int bufferIndex = 0; bufferIndex < bufferList->mNumberBuffers; bufferIndex++) {
+        memset(bufferList->mBuffers[bufferIndex].mData, 0, bufferList->mBuffers[bufferIndex].mDataByteSize);
+    }
+}
 
 @end
 

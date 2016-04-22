@@ -1,0 +1,30 @@
+{
+  "DVTSourceControlWorkspaceBlueprintPrimaryRemoteRepositoryKey" : "4514FDAC87CBA75158FF43F0C56236E74611879B",
+  "DVTSourceControlWorkspaceBlueprintWorkingCopyRepositoryLocationsKey" : {
+
+  },
+  "DVTSourceControlWorkspaceBlueprintWorkingCopyStatesKey" : {
+    "4514FDAC87CBA75158FF43F0C56236E74611879B" : 0,
+    "50154214D1C88C562889E8A153D41D3AF5323411" : 0
+  },
+  "DVTSourceControlWorkspaceBlueprintIdentifierKey" : "31A09928-86FC-44E3-B822-E3F9EAFDCAA5",
+  "DVTSourceControlWorkspaceBlueprintWorkingCopyPathsKey" : {
+    "4514FDAC87CBA75158FF43F0C56236E74611879B" : "AVAudioEngineTest\/",
+    "50154214D1C88C562889E8A153D41D3AF5323411" : "..\/Composer's%20Sketchpad"
+  },
+  "DVTSourceControlWorkspaceBlueprintNameKey" : "AVAudioEngineTest",
+  "DVTSourceControlWorkspaceBlueprintVersion" : 204,
+  "DVTSourceControlWorkspaceBlueprintRelativePathToProjectKey" : "AVAudioEngineTest.xcodeproj",
+  "DVTSourceControlWorkspaceBlueprintRemoteRepositoriesKey" : [
+    {
+      "DVTSourceControlWorkspaceBlueprintRemoteRepositoryURLKey" : "github.com:archagon\/aumidisynth-offline-render-test.git",
+      "DVTSourceControlWorkspaceBlueprintRemoteRepositorySystemKey" : "com.apple.dt.Xcode.sourcecontrol.Git",
+      "DVTSourceControlWorkspaceBlueprintRemoteRepositoryIdentifierKey" : "4514FDAC87CBA75158FF43F0C56236E74611879B"
+    },
+    {
+      "DVTSourceControlWorkspaceBlueprintRemoteRepositoryURLKey" : "github.com:archagon\/ComposersSketchpad.git",
+      "DVTSourceControlWorkspaceBlueprintRemoteRepositorySystemKey" : "com.apple.dt.Xcode.sourcecontrol.Git",
+      "DVTSourceControlWorkspaceBlueprintRemoteRepositoryIdentifierKey" : "50154214D1C88C562889E8A153D41D3AF5323411"
+    }
+  ]
+}

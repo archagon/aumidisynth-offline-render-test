@@ -19,6 +19,7 @@ AudioBufferList *AEAllocateAndInitAudioBufferList(AudioStreamBasicDescription au
 void AEFreeAudioBufferList(AudioBufferList *bufferList );
 
 @interface ViewController ()
+
 @property (nonatomic) AUGraph graph;
 @property (nonatomic) AudioUnit ioUnit;
 @property (nonatomic) AudioUnit mixerUnit;
@@ -27,6 +28,10 @@ void AEFreeAudioBufferList(AudioBufferList *bufferList );
 @property (nonatomic) MusicPlayer player;
 @property (nonatomic) NSArray <NSValue*> * synths;
 @property (nonatomic) NSArray <NSNumber*> * synthNodes;
+
+@property (nonatomic) Float64 sampleRate;
+@property (nonatomic) SInt32 framesPerSlice;
+
 @end
 
 @implementation ViewController
@@ -36,15 +41,14 @@ void AEFreeAudioBufferList(AudioBufferList *bufferList );
     
     [[AVAudioSession sharedInstance] setActive:YES error:NULL];
     [[AVAudioSession sharedInstance] setPreferredSampleRate:44100 error:NULL];
-    Float64 sampleRate = [[AVAudioSession sharedInstance] preferredSampleRate];
+    self.sampleRate = [[AVAudioSession sharedInstance] preferredSampleRate];
     
     // audio graph
     {
-        // create graph
+        // create initial graph
         {
             AUGraph graph;
             AUNode ioNode, mixerNode;
-            AudioUnit ioUnit, mixerUnit;
             
             AudioComponentDescription cd = {};
             cd.componentManufacturer     = kAudioUnitManufacturer_Apple;
@@ -63,60 +67,52 @@ void AEFreeAudioBufferList(AudioBufferList *bufferList );
             
             OSSTATUS = AUGraphAddNode (graph, &cd, &ioNode); OSSTATUS_CHECK
             
+            // in most examples, this function is called after nodes are added; not sure if we can call it before
+            // however, it does have to be called before we make connections or set properties
             OSSTATUS = AUGraphOpen (graph); OSSTATUS_CHECK
             
             OSSTATUS = AUGraphConnectNodeInput (graph, mixerNode, 0, ioNode, 0); OSSTATUS_CHECK
             
-            OSSTATUS = AUGraphNodeInfo (graph, mixerNode, 0, &mixerUnit); OSSTATUS_CHECK
-            OSSTATUS = AUGraphNodeInfo (graph, ioNode, 0, &ioUnit); OSSTATUS_CHECK
-            
             self.graph = graph;
-            self.mixerUnit = mixerUnit;
-            self.ioUnit = ioUnit;
             self.mixerNode = mixerNode;
             self.ioNode = ioNode;
         }
         
-        // start graph
+        // setup initial units
         {
+            AudioUnit ioUnit, mixerUnit;
+            
+            OSSTATUS = AUGraphNodeInfo (self.graph, self.mixerNode, 0, &mixerUnit); OSSTATUS_CHECK
+            OSSTATUS = AUGraphNodeInfo (self.graph, self.ioNode, 0, &ioUnit); OSSTATUS_CHECK
+
             UInt32 framesPerSlice = 0;
             UInt32 framesPerSlicePropertySize = sizeof (framesPerSlice);
-            UInt32 sampleRatePropertySize = sizeof (sampleRate);
-            
-//            AudioUnitInitialize (self.ioUnit);
 
-            // not writable
-//            OSSTATUS = AudioUnitSetProperty (self.ioUnit,
-//                                  kAudioUnitProperty_SampleRate,
-//                                  kAudioUnitScope_Output,
-//                                  0,
-//                                  &sampleRate,
-//                                  sampleRatePropertySize); OSSTATUS_CHECK
+            // global frames per slice
+            OSSTATUS = AudioUnitGetProperty (ioUnit,
+                                             kAudioUnitProperty_MaximumFramesPerSlice,
+                                             kAudioUnitScope_Global,
+                                             0,
+                                             &framesPerSlice,
+                                             &framesPerSlicePropertySize); OSSTATUS_CHECK
+            self.framesPerSlice = framesPerSlice;
             
-            OSSTATUS = AudioUnitSetProperty (self.mixerUnit,
-                                  kAudioUnitProperty_SampleRate,
-                                  kAudioUnitScope_Output,
-                                  0,
-                                  &sampleRate,
-                                  sampleRatePropertySize); OSSTATUS_CHECK
+            // this is necessary so that we can set the output unit's sample rate
+            OSSTATUS = AudioUnitInitialize(ioUnit); OSSTATUS_CHECK
             
-            OSSTATUS = AudioUnitGetProperty (self.ioUnit,
-                                  kAudioUnitProperty_MaximumFramesPerSlice,
-                                  kAudioUnitScope_Global,
-                                  0,
-                                  &framesPerSlice,
-                                  &framesPerSlicePropertySize); OSSTATUS_CHECK
+            [self configureAudioUnit:ioUnit];
+            [self configureAudioUnit:mixerUnit];
             
             UInt32 busCount = 50;
-            OSSTATUS = AudioUnitSetProperty(self.mixerUnit,
+            OSSTATUS = AudioUnitSetProperty(mixerUnit,
                                  kAudioUnitProperty_ElementCount,
                                  kAudioUnitScope_Input,
                                  0,
                                  &busCount,
                                  sizeof(busCount)); OSSTATUS_CHECK
             
-//            AUGraphInitialize (self.graph);
-//            AUGraphStart (self.graph);
+            self.mixerUnit = mixerUnit;
+            self.ioUnit = ioUnit;
         }
         
         // create samplers
@@ -135,46 +131,23 @@ void AEFreeAudioBufferList(AudioBufferList *bufferList );
             
             OSSTATUS = AUGraphAddNode(self.graph, &cd, &samplerNode); OSSTATUS_CHECK
             
-            OSSTATUS = AUGraphOpen(self.graph); OSSTATUS_CHECK
             OSSTATUS = AUGraphConnectNodeInput(self.graph, samplerNode, 0, self.mixerNode, 1 + i); OSSTATUS_CHECK
             
             OSSTATUS = AUGraphNodeInfo (self.graph, samplerNode, 0, &samplerUnit); OSSTATUS_CHECK
-            
-            UInt32 framesPerSlice = 0;
-            UInt32 framesPerSlicePropertySize = sizeof (framesPerSlice);
-            UInt32 sampleRatePropertySize = sizeof (sampleRate);
         
-            OSSTATUS = AudioUnitGetProperty(self.ioUnit,
-                                 kAudioUnitProperty_MaximumFramesPerSlice,
-                                 kAudioUnitScope_Global,
-                                 0,
-                                 &framesPerSlice,
-                                 &framesPerSlicePropertySize); OSSTATUS_CHECK
-            
-            OSSTATUS = AudioUnitSetProperty(samplerUnit,
-                                 kAudioUnitProperty_SampleRate,
-                                 kAudioUnitScope_Output,
-                                 0,
-                                 &sampleRate,
-                                 sampleRatePropertySize); OSSTATUS_CHECK
-            
-            OSSTATUS = AudioUnitSetProperty(samplerUnit,
-                                 kAudioUnitProperty_MaximumFramesPerSlice,
-                                 kAudioUnitScope_Global,
-                                 0,
-                                 &framesPerSlice,
-                                 framesPerSlicePropertySize); OSSTATUS_CHECK
-            
-//            AudioUnitInitialize(samplerUnit);
-//            
-//            AUGraphUpdate(self.graph, NULL);
+            [self configureAudioUnit:samplerUnit];
             
             [synths addObject:[NSValue valueWithPointer:samplerUnit]];
             [synthNodes addObject:@(samplerNode)];
         }
-        
         self.synths = synths;
         self.synthNodes = synthNodes;
+      
+        // create the whole shebang
+        AUGraphInitialize(self.graph);
+        
+        // this should only be called after the samplers are initialized
+        [self setupSoundbanks];
     }
     
     // player
@@ -290,8 +263,6 @@ void AEFreeAudioBufferList(AudioBufferList *bufferList );
         self.player = player;
     }
     
-    [self setupSoundbanks];
-    
     // buttons
     {
         UIButton* start = [UIButton buttonWithType:UIButtonTypeSystem];
@@ -326,69 +297,21 @@ void AEFreeAudioBufferList(AudioBufferList *bufferList );
     }
 }
 
--(void) setupSoundbanks {
-    for (int i = 0; i < self.synths.count; i++) {
-        NSURL* aUrl = [[NSBundle mainBundle] URLForResource:@"GeneralUser GS MuseScore v1.442" withExtension:@"sf2"];
-        
-        CFURLRef url = CFBridgingRetain(aUrl);
-        OSSTATUS = AudioUnitSetProperty([self.synths[i] pointerValue],
-                             kMusicDeviceProperty_SoundBankURL,
-                             kAudioUnitScope_Global,
-                             0,
-                             &url,
-                             sizeof(url)); OSSTATUS_CHECK
-        //CFBridgingRelease((__bridge CFTypeRef _Nullable)(aUrl));
-    }
-}
-
--(void) setupInstruments {
-    // random instrument each time
-    for (int i = 0; i < self.synths.count; i++) {
-        UInt32 actualPreset = arc4random_uniform(100);
-        
-        for (int j = 0; j < 16; j++) {
-            UInt32 enabled = 1;
-            OSSTATUS = AudioUnitSetProperty([self.synths[i] pointerValue], kAUMIDISynthProperty_EnablePreload, kAudioUnitScope_Global, 0, &enabled, sizeof(enabled)); OSSTATUS_CHECK
-
-            UInt32 instrumentMSB = kAUSampler_DefaultMelodicBankMSB;
-            UInt32 instrumentLSB = kAUSampler_DefaultBankLSB;
-            UInt32 percussionMSB = kAUSampler_DefaultPercussionBankMSB;
-            UInt32 percussionLSB = kAUSampler_DefaultBankLSB;
-            OSSTATUS = MusicDeviceMIDIEvent([self.synths[i] pointerValue], 0xB0 | j, 0x00, instrumentMSB, 0); OSSTATUS_CHECK
-            OSSTATUS = MusicDeviceMIDIEvent([self.synths[i] pointerValue], 0xB0 | j, 0x20, instrumentLSB, 0); OSSTATUS_CHECK
-
-            OSSTATUS = MusicDeviceMIDIEvent([self.synths[i] pointerValue], 0xC0 | j, (UInt32)actualPreset, 0, 0); OSSTATUS_CHECK
-
-            enabled = 0;
-            OSSTATUS = AudioUnitSetProperty([self.synths[i] pointerValue], kAUMIDISynthProperty_EnablePreload, kAudioUnitScope_Global, 0, &enabled, sizeof(enabled)); OSSTATUS_CHECK
-
-            OSSTATUS = MusicDeviceMIDIEvent([self.synths[i] pointerValue], 0xC0 | j, (UInt32)actualPreset, 0, 0); OSSTATUS_CHECK
-        }
-    }
-}
-
 -(void) start {
     [self stop];
     
-    // needed for playback
-    OSSTATUS = AUGraphInitialize(self.graph); OSSTATUS_CHECK
-//    AUGraphStart(self.graph);
-    
-//    [self setupSoundbanks];
-    [self setupInstruments];
-    
-//    AUGraphUpdate(self.graph, NULL);
-    
     [self setRegularOutput];
+    
+    [self setupInstruments];
 
     OSSTATUS = MusicPlayerSetTime(self.player, 0); OSSTATUS_CHECK
     OSSTATUS = MusicPlayerStart(self.player); OSSTATUS_CHECK
+    
+    // note: graph automatically starts running when the music player starts and stops when it stops
 }
 
 -(void) render {
     [self stop];
-    
-    //AUGraphStart(self.graph);
     
     [self setGenericOutput];
     
@@ -406,73 +329,133 @@ void AEFreeAudioBufferList(AudioBufferList *bufferList );
     OSSTATUS = MusicPlayerStop(self.player); OSSTATUS_CHECK
 }
 
--(void) setRegularOutput {
+// TODO: do we need to set the frames-per-slice for our mixer?
+
+// for some units, these can only be done when they're uninitialized
+-(void) configureAudioUnit:(AudioUnit)unit {
+    OSSTATUS = AudioUnitSetProperty (unit,
+                                     kAudioUnitProperty_SampleRate,
+                                     kAudioUnitScope_Output,
+                                     0,
+                                     &_sampleRate,
+                                     sizeof(_sampleRate)); OSSTATUS_CHECK
+    OSSTATUS = AudioUnitSetProperty (unit,
+                                     kAudioUnitProperty_MaximumFramesPerSlice,
+                                     kAudioUnitScope_Global,
+                                     0,
+                                     &_framesPerSlice,
+                                     sizeof(_framesPerSlice)); OSSTATUS_CHECK
 }
 
--(void) setGenericOutput {
-//    AUGraphStop(self.graph);
-    
-    Float64 sampleRate = 44100;
-    
+-(void) setupSoundbanks {
+    for (int i = 0; i < self.synths.count; i++) {
+        NSURL* aUrl = [[NSBundle mainBundle] URLForResource:@"GeneralUser GS MuseScore v1.442" withExtension:@"sf2"];
+        
+        CFURLRef url = (__bridge CFURLRef)aUrl;
+        OSSTATUS = AudioUnitSetProperty([self.synths[i] pointerValue],
+                                        kMusicDeviceProperty_SoundBankURL,
+                                        kAudioUnitScope_Global,
+                                        0,
+                                        &url,
+                                        sizeof(url)); OSSTATUS_CHECK
+    }
+}
+
+-(void) setupInstruments {
+    // random instrument each time
+    for (int i = 0; i < self.synths.count; i++) {
+        UInt32 actualPreset = arc4random_uniform(100);
+        
+        for (int j = 0; j < 16; j++) {
+            UInt32 enabled = 1;
+            OSSTATUS = AudioUnitSetProperty([self.synths[i] pointerValue],
+                                            kAUMIDISynthProperty_EnablePreload,
+                                            kAudioUnitScope_Global,
+                                            0,
+                                            &enabled,
+                                            sizeof(enabled)); OSSTATUS_CHECK
+            
+            UInt32 instrumentMSB = kAUSampler_DefaultMelodicBankMSB;
+            UInt32 instrumentLSB = kAUSampler_DefaultBankLSB;
+            //UInt32 percussionMSB = kAUSampler_DefaultPercussionBankMSB;
+            //UInt32 percussionLSB = kAUSampler_DefaultBankLSB;
+            OSSTATUS = MusicDeviceMIDIEvent([self.synths[i] pointerValue], 0xB0 | j, 0x00, instrumentMSB, 0); OSSTATUS_CHECK
+            OSSTATUS = MusicDeviceMIDIEvent([self.synths[i] pointerValue], 0xB0 | j, 0x20, instrumentLSB, 0); OSSTATUS_CHECK
+            
+            OSSTATUS = MusicDeviceMIDIEvent([self.synths[i] pointerValue], 0xC0 | j, (UInt32)actualPreset, 0, 0); OSSTATUS_CHECK
+            
+            enabled = 0;
+            OSSTATUS = AudioUnitSetProperty([self.synths[i] pointerValue],
+                                            kAUMIDISynthProperty_EnablePreload,
+                                            kAudioUnitScope_Global,
+                                            0,
+                                            &enabled,
+                                            sizeof(enabled)); OSSTATUS_CHECK
+            
+            OSSTATUS = MusicDeviceMIDIEvent([self.synths[i] pointerValue], 0xC0 | j, (UInt32)actualPreset, 0, 0); OSSTATUS_CHECK
+        }
+    }
+}
+
+// swap out the output unit for a regular one and hook everything back up
+-(void) setRegularOutput {
     AUNode node = self.ioNode;
+    AudioUnit unit = NULL;
     
     AudioComponentDescription desc;
-    AudioUnit unit;
     OSSTATUS = AUGraphNodeInfo(self.graph, self.ioNode, &desc, &unit); OSSTATUS_CHECK
     
-    OSSTATUS = AUGraphRemoveNode (self.graph, node); OSSTATUS_CHECK
-    desc.componentSubType = kAudioUnitSubType_GenericOutput;
-    OSSTATUS = AUGraphAddNode (self.graph, &desc, &node); OSSTATUS_CHECK
-    OSSTATUS = AUGraphNodeInfo(self.graph, node, NULL, &unit); OSSTATUS_CHECK
-    self.ioUnit = unit;
-    self.ioNode = node;
-    
-    OSSTATUS = AUGraphConnectNodeInput (self.graph, self.mixerNode, 0, self.ioNode, 0); OSSTATUS_CHECK
-//    AudioUnitInitialize(self.ioUnit);
-    
-    OSSTATUS = AudioUnitSetProperty (self.ioUnit,
-                          kAudioUnitProperty_SampleRate,
-                          kAudioUnitScope_Output, 0,
-                          &sampleRate, sizeof(sampleRate)); OSSTATUS_CHECK
-    
-    NSInteger numFrames = 512;
-    
-    for (int i = 0; i < self.synths.count; i++) {
-        UInt32 value = 1;
-//        int asdf = AudioUnitSetProperty ([self.synths[i] pointerValue],
-//                              kAudioUnitProperty_OfflineRender,
-//                              kAudioUnitScope_Global, 0,
-//                              &value, sizeof(value));
+    if (desc.componentSubType != kAudioUnitSubType_RemoteIO) {
+        OSSTATUS = AudioUnitUninitialize(unit); OSSTATUS_CHECK
+        OSSTATUS = AUGraphRemoveNode (self.graph, node); OSSTATUS_CHECK
         
-        //AudioUnitSetProperty (theSynth,
-        //                      kAudioUnitProperty_CPULoad,
-        //                      kAudioUnitScope_Global, 0,
-        //                      &maxCPULoad, sizeof(maxCPULoad))
+        desc.componentSubType = kAudioUnitSubType_RemoteIO;
+        OSSTATUS = AUGraphAddNode (self.graph, &desc, &node); OSSTATUS_CHECK
+        OSSTATUS = AUGraphNodeInfo(self.graph, node, NULL, &unit); OSSTATUS_CHECK
         
-        OSSTATUS = AudioUnitSetProperty ([self.synths[i] pointerValue], kAudioUnitProperty_MaximumFramesPerSlice,
-                              kAudioUnitScope_Global, 0,
-                              &numFrames, sizeof(numFrames)); OSSTATUS_CHECK
+        OSSTATUS = AUGraphConnectNodeInput (self.graph, self.mixerNode, 0, node, 0); OSSTATUS_CHECK
+        
+        [self configureAudioUnit:unit];
+        
+        OSSTATUS = AUGraphUpdate(self.graph, NULL); OSSTATUS_CHECK
+        
+        self.ioUnit = unit;
+        self.ioNode = node;
     }
+}
+
+// swap out the output unit for a generic one and hook everything back up
+-(void) setGenericOutput {
+    CAShow(self.graph);
     
-    OSSTATUS = AudioUnitSetProperty (self.mixerUnit, kAudioUnitProperty_MaximumFramesPerSlice,
-                          kAudioUnitScope_Global, 0,
-                          &numFrames, sizeof(numFrames)); OSSTATUS_CHECK
+    AUNode node = self.ioNode;
+    AudioUnit unit = NULL;
     
-    OSSTATUS = AudioUnitSetProperty (self.ioUnit, kAudioUnitProperty_MaximumFramesPerSlice,
-                          kAudioUnitScope_Global, 0,
-                          &numFrames, sizeof(numFrames)); OSSTATUS_CHECK
+    AudioComponentDescription desc;
+    OSSTATUS = AUGraphNodeInfo(self.graph, self.ioNode, &desc, &unit); OSSTATUS_CHECK
     
-//    AUGraphUpdate(self.graph, NULL);
-//    AUGraphStart(self.graph);
-    
-    OSSTATUS = AUGraphInitialize(self.graph);
+    if (desc.componentSubType != kAudioUnitSubType_GenericOutput) {
+        OSSTATUS = AudioUnitUninitialize(unit); OSSTATUS_CHECK
+        OSSTATUS = AUGraphRemoveNode (self.graph, node); OSSTATUS_CHECK
+        
+        desc.componentSubType = kAudioUnitSubType_GenericOutput;
+        OSSTATUS = AUGraphAddNode (self.graph, &desc, &node); OSSTATUS_CHECK
+        OSSTATUS = AUGraphNodeInfo(self.graph, node, NULL, &unit); OSSTATUS_CHECK
+        
+        OSSTATUS = AUGraphConnectNodeInput (self.graph, self.mixerNode, 0, node, 0); OSSTATUS_CHECK
+        
+        [self configureAudioUnit:unit];
+        
+        OSSTATUS = AUGraphUpdate(self.graph, NULL); OSSTATUS_CHECK
+        
+        self.ioUnit = unit;
+        self.ioNode = node;
+    }
 }
 
 // from http://stackoverflow.com/questions/30679061/can-i-use-avaudioengine-to-read-from-a-file-process-with-an-audio-unit-and-writ
 
 - (void)renderAudioAndWriteToFile {
-//    AUGraphStop(self.graph);
-    
     UInt32 size;
     AudioStreamBasicDescription clientFormat;
     memset (&clientFormat, 0, sizeof(AudioStreamBasicDescription));
